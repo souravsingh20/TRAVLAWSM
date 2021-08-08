@@ -1,0 +1,9 @@
+git config --global user.name "Sourav Singh"
+git config --global user.email "souravwizard20@gmail.com"
+touch .gitignore
+git init
+git add .
+git commit -m "initial commit"
+git status
+git remote add origin https://github.com/souravsingh20/TRAVLAWSM.git
+git push -f origin master (only to force push)
