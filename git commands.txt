@@ -6,4 +6,5 @@ git add .
 git commit -m "initial commit"
 git status
 git remote add origin https://github.com/souravsingh20/TRAVLAWSM.git
+git push origin master
 git push -f origin master (only to force push)

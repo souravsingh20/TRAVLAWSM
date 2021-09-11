@@ -5,6 +5,12 @@ let Post = require ('./models/posts').Post;
 let multer = require('multer');
 let path = require('path');
 let uniqid = require('uniqid');
+let User = require ('./models/users').User;
+let bcrypt = require('bcrypt');
+let auth = require('./controllers/auth');
+let cookieParser = require('cookie-parser');
+let authMiddleware = require('./middleware/auth');
+
 // let callbackRequestsRouter = require('./routes/callback-requests');
 
 let CallbackRequest = require('./models/callback-requests').CallbackRequest;
@@ -31,6 +37,7 @@ let imageStorage = multer.diskStorage({
 })
 
 app.use(multer({storage: imageStorage}).single('imageFile'));
+app.use(cookieParser());
 
 // let id = 1;
 
@@ -57,7 +64,7 @@ app.get('/posts/:id', async (req, resp)=>{
     resp.send(post);
 })
 
-app.post('/posts', async (req, resp)=>{
+app.post('/posts', authMiddleware, async (req, resp)=>{
     let reqBody = req.body;
     let imgPath;
     if(reqBody.imageUrl){
@@ -81,13 +88,13 @@ app.post('/posts', async (req, resp)=>{
     resp.send('Created')
 })
 
-app.delete('/posts/:id', async (req, resp)=>{
+app.delete('/posts/:id', authMiddleware, async (req, resp)=>{
     let id = req.params.id;
     await Post.deleteOne({id: id});
     resp.send('Deleted!')
 })
 
-app.put('/posts/:id', async (req, resp) => {
+app.put('/posts/:id', authMiddleware, async (req, resp) => {
     let id = req.params.id;
     await Post.updateOne({id: id}, req.body);
     resp.send('Updated!');
@@ -101,7 +108,7 @@ app.use(express.static('public'));
 app.get('/callback-requests', async (req, resp) => {
     resp.send(await CallbackRequest.find());
 });
-app.post('/callback-requests', async (req, resp) => {
+app.post('/callback-requests', authMiddleware, async (req, resp) => {
     let reqBody = req.body;
     let newRequest = new CallbackRequest({
         id: uniqid(),
@@ -111,13 +118,13 @@ app.post('/callback-requests', async (req, resp) => {
     await newRequest.save()
     resp.send('Accepted');
 });
-app.delete('/callback-requests/:id', async (req, resp) => {
+app.delete('/callback-requests/:id', authMiddleware, async (req, resp) => {
     await CallbackRequest.deleteOne({id: req.params.id});
     resp.send('Deleted');
 });
 
 //mails
-app.get('/emails', async (req, resp) => {
+app.get('/emails', authMiddleware, async (req, resp) => {
     resp.send(await Email.find());
 });
 app.post('/emails', async (req, resp) => {
@@ -132,7 +139,7 @@ app.post('/emails', async (req, resp) => {
     await newEmail.save()
     resp.send('Accepted');
 });
-app.delete('/emails/:id', async (req, resp) => {
+app.delete('/emails/:id', authMiddleware, async (req, resp) => {
     await Email.deleteOne({id: req.params.id});
     resp.send('Deleted');
 });
@@ -147,6 +154,63 @@ app.get('/sight', async (req, resp) => {
         text: post.text
     })
 })
+
+// users
+app.post('/users/login', async (req, resp) => {
+    let email = req.body.email;
+    let password = req.body.password;
+    let user = await User.find().where({email: email});
+    if(user.length > 0) {
+        let comparisonResult = await bcrypt.compare(password, user[0].password);
+        if(comparisonResult) {
+            let token = auth.generateToken(user[0]);
+            resp.cookie('auth_token', token);
+            resp.send({
+                redirectURL: '/admin'
+            }); 
+        } else {
+            resp.status(400);
+            resp.send('Rejected');
+        }
+    } else {
+        resp.send('Rejected');
+    }
+})
+
+app.post('/users/register', async (req, resp) => {
+    let email = req.body.email;
+    let password = req.body.password;
+    let user = await User.find().where({email: email});
+    if(user.length === 0) {
+        let encryptedPass = await bcrypt.hash(password, 12);
+        let newUser = new User({
+            email: email,
+            password: encryptedPass
+        })
+        await newUser.save();
+        resp.send('Done');
+    } else {
+        resp.send('Rejected');
+    }
+})
+
+// admin login
+app.get('/admin', (req, resp) => {
+    let token = req.cookies['auth_token'];
+    if(token && auth.checkToken(token)) {
+        resp.render('admin');
+    } else {
+        resp.redirect('/login');
+    }
+    
+})
+app.get('/login', (req, resp) => {
+    resp.render('login');
+})
+
+
+
+
 
 
 
